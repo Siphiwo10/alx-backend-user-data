@@ -1,73 +1,107 @@
 #!/usr/bin/env python3
 """
-module
+retrieves data from a CSV file and logs it with redacted PII fields.
 """
-import csv
+
+import re
 import logging
 import os
-import re
+import csv
 from typing import List
-import mysql.connector
-
-PII_FIELDS = ("name", "email", "phone", "ssn", "password")
 
 
 class RedactingFormatter(logging.Formatter):
-    """class"""
-
+    """
+    Formatter classes.
+    """
     REDACTION = "***"
     FORMAT = "[HOLBERTON] %(name)s %(levelname)s %(asctime)-15s: %(message)s"
     SEPARATOR = ";"
 
     def __init__(self, fields: List[str]):
-        """init"""
-        super(RedactingFormatter, self).__init__(self.FORMAT)
+        """
+        Initializes the RedactingFormatter with a list of fields to redact.
+        """
         self.fields = fields
+        super().__init__(self.FORMAT)
 
     def format(self, record: logging.LogRecord) -> str:
-        record.msg = filter_datum(self.fields, self.REDACTION, record.msg, self.SEPARATOR)
-        return super().format(record)
+        """
+        Formats a log record by filtering values using and redacting them.
+        """
+        result = super().format(record)
+        return filter_datum(
+            self.fields,
+            self.REDACTION,
+            result,
+            self.SEPARATOR)
 
 
-def filter_datum(fields, redaction, message, separator):
-    """method"""
-    return re.sub(r'(?<=(' + '|'.join(fields) + r')' + re.escape(separator) + r')[^' + re.escape(separator) + r']*',
-                  redaction, message)
+PII_FIELDS = ('name', 'email', 'password', 'ssn', 'phone')
+
+
+def filter_datum(fields: List[str],
+                 redaction: str,
+                 message: str,
+                 separator: str) -> str:
+    """
+    Returns datum
+    """
+    for item in fields:
+        message = re.sub(item + '=.*?' + separator, item + '=' +
+                         redaction + separator, message)
+    return message
+
+
+def create_user_data_logger() -> logging.Logger:
+    """
+    Creates and configures processing.
+    """
+    logger = logging.getLogger('user_data')
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    target_handler = logging.StreamHandler()
+    target_handler.setLevel(logging.INFO)
+
+    formatter = RedactingFormatter(PII_FIELDS)
+    target_handler.setFormatter(formatter)
+
+    logger.addHandler(target_handler)
+
+    return logger
 
 
 def get_logger() -> logging.Logger:
-    """return a logger object"""
-    lg = logging.getLogger("user_data")
-    lg.setLevel(logging.INFO)
-    lg.propagate = False
-    sh = logging.StreamHandler()
-    sh.setFormatter(RedactingFormatter(PII_FIELDS))
-    lg.addHandler(sh)
-    return lg
-
-
-def get_db() -> mysql.connector.connection.MySQLConnection:
-    """connect to MySQL database"""
-    return mysql.connector.connect(
-        host=os.getenv("PERSONAL_DATA_DB_HOST", "root"),
-        database=os.getenv("PERSONAL_DATA_DB_NAME"),
-        user=os.getenv("PERSONAL_DATA_DB_USERNAME", "localhost"),
-        password=os.getenv("PERSONAL_DATA_DB_PASSWORD", ""),
-    )
-
-
-def main():
     """
-    main function
+    a logger for user data processing.
     """
-    con = get_db()
-    users = con.cursor()
-    users.execute("SELECT CONCAT('name=', name, '; ssn=', ssn, '; ip=', ip, \
-        '; user_agent=', user_agent, ';') AS message FROM users;")
+    logger = logging.getLogger("user_data")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    formatter = RedactingFormatter(PII_FIELDS)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(formatter)
+
+    logger.addHandler(stream_handler)
+
+    return logger
+
+
+def main() -> None:
+    """
+    Main data.
+    """
     logger = get_logger()
 
-    for user in users:
-        logger.log(logging.INFO, user[0])
+    with open("user_data.csv", newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            fields = '; '.join(
+                    [f"{key}={value}" for key, value in row.items()])
+            logger.info(fields)
 
 
 if __name__ == "__main__":
