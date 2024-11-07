@@ -1,110 +1,73 @@
 #!/usr/bin/env python3
 """
-This script filters personal information (PII) from log messages using regular
-expressions and environmental variables. It retrieves data from a secure
-database and logs it with redacted PII fields.
+module
 """
-
-import re
+import csv
 import logging
 import os
-import csv
+import re
 from typing import List
 import mysql.connector
 
+PII_FIELDS = ("name", "email", "phone", "ssn", "password")
+
 
 class RedactingFormatter(logging.Formatter):
-    """
-    Formatter class for redacting PII fields in log messages.
-    """
+    """class"""
+
     REDACTION = "***"
     FORMAT = "[HOLBERTON] %(name)s %(levelname)s %(asctime)-15s: %(message)s"
     SEPARATOR = ";"
 
     def __init__(self, fields: List[str]):
-        """
-        Initializes the RedactingFormatter with a list of fields to redact.
-        """
+        """init"""
+        super(RedactingFormatter, self).__init__(self.FORMAT)
         self.fields = fields
-        super().__init__(self.FORMAT)
 
     def format(self, record: logging.LogRecord) -> str:
-        """
-        Formats a log record by filtering values and redacting them.
-        """
-        result = super().format(record)
-        return filter_datum(
-            self.fields,
-            self.REDACTION,
-            result,
-            self.SEPARATOR
-        )
+        record.msg = filter_datum(self.fields, self.REDACTION, record.msg, self.SEPARATOR)
+        return super().format(record)
 
 
-PII_FIELDS = ('name', 'email', 'password', 'ssn', 'phone')
+def filter_datum(fields, redaction, message, separator):
+    """method"""
+    return re.sub(r'(?<=(' + '|'.join(fields) + r')' + re.escape(separator) + r')[^' + re.escape(separator) + r']*',
+                  redaction, message)
 
 
-def filter_datum(fields: List[str], redaction: str, message: str, separator: str) -> str:
-    """
-    Returns the log message with specified fields redacted.
-    """
-    for item in fields:
-        message = re.sub(rf'{item}=[^;]*', f'{item}={redaction}', message)
-    return message
+def get_logger() -> logging.Logger:
+    """return a logger object"""
+    lg = logging.getLogger("user_data")
+    lg.setLevel(logging.INFO)
+    lg.propagate = False
+    sh = logging.StreamHandler()
+    sh.setFormatter(RedactingFormatter(PII_FIELDS))
+    lg.addHandler(sh)
+    return lg
 
 
-def get_db():
-    """
-    Retrieves a database connection using credentials stored in environment variables.
-    """
-    username = os.getenv('PERSONAL_DATA_DB_USERNAME', 'root')
-    password = os.getenv('PERSONAL_DATA_DB_PASSWORD', '')
-    host = os.getenv('PERSONAL_DATA_DB_HOST', 'localhost')
-    database = os.getenv('PERSONAL_DATA_DB_NAME')
-
+def get_db() -> mysql.connector.connection.MySQLConnection:
+    """connect to MySQL database"""
     return mysql.connector.connect(
-        user=username,
-        password=password,
-        host=host,
-        database=database
+        host=os.getenv("PERSONAL_DATA_DB_HOST", "root"),
+        database=os.getenv("PERSONAL_DATA_DB_NAME"),
+        user=os.getenv("PERSONAL_DATA_DB_USERNAME", "localhost"),
+        password=os.getenv("PERSONAL_DATA_DB_PASSWORD", ""),
     )
 
 
-def create_user_data_logger() -> logging.Logger:
+def main():
     """
-    Creates and configures a logger specifically for user data processing.
+    main function
     """
-    logger = logging.getLogger('user_data')
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
+    con = get_db()
+    users = con.cursor()
+    users.execute("SELECT CONCAT('name=', name, '; ssn=', ssn, '; ip=', ip, \
+        '; user_agent=', user_agent, ';') AS message FROM users;")
+    logger = get_logger()
 
-    target_handler = logging.StreamHandler()
-    target_handler.setLevel(logging.INFO)
-
-    formatter = RedactingFormatter(PII_FIELDS)
-    target_handler.setFormatter(formatter)
-
-    logger.addHandler(target_handler)
-
-    return logger
-
-
-def main() -> None:
-    """
-    Connects to the database, retrieves user data, formats it, and logs it with redacted PII.
-    """
-    logger = create_user_data_logger()
-    db = get_db()
-    cursor = db.cursor()
-
-    cursor.execute("SELECT * FROM users;")
-    for row in cursor:
-        # Create a log message from row data
-        fields = '; '.join([f"{key}={value}" for key, value in zip(PII_FIELDS, row)])
-        logger.info(fields)
-
-    cursor.close()
-    db.close()
+    for user in users:
+        logger.log(logging.INFO, user[0])
 
 
 if __name__ == "__main__":
