@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-Main file
+This script filters personal information (PII) from log messages using regular
+expressions and environmental variables. It retrieves data from a secure
+database and logs it with redacted PII fields.
 """
 
 import re
@@ -8,6 +10,7 @@ import logging
 import os
 import csv
 from typing import List
+import mysql.connector
 
 
 class RedactingFormatter(logging.Formatter):
@@ -27,30 +30,44 @@ class RedactingFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """
-        Formats a log record by filtering values using and redacting them.
+        Formats a log record by filtering values and redacting them.
         """
         result = super().format(record)
         return filter_datum(
             self.fields,
             self.REDACTION,
             result,
-            self.SEPARATOR)
+            self.SEPARATOR
+        )
 
 
 PII_FIELDS = ('name', 'email', 'password', 'ssn', 'phone')
 
 
-def filter_datum(fields: List[str],
-                 redaction: str,
-                 message: str,
-                 separator: str) -> str:
+def filter_datum(fields: List[str], redaction: str, message: str, separator: str) -> str:
     """
-    Returns the log with Regex
+    Returns the log message with specified fields redacted.
     """
     for item in fields:
-        message = re.sub(item + '=.*?' + separator, item + '=' +
-                         redaction + separator, message)
+        message = re.sub(rf'{item}=[^;]*', f'{item}={redaction}', message)
     return message
+
+
+def get_db():
+    """
+    Retrieves a database connection using credentials stored in environment variables.
+    """
+    username = os.getenv('PERSONAL_DATA_DB_USERNAME', 'root')
+    password = os.getenv('PERSONAL_DATA_DB_PASSWORD', '')
+    host = os.getenv('PERSONAL_DATA_DB_HOST', 'localhost')
+    database = os.getenv('PERSONAL_DATA_DB_NAME')
+
+    return mysql.connector.connect(
+        user=username,
+        password=password,
+        host=host,
+        database=database
+    )
 
 
 def create_user_data_logger() -> logging.Logger:
@@ -72,36 +89,22 @@ def create_user_data_logger() -> logging.Logger:
     return logger
 
 
-def get_logger() -> logging.Logger:
-    """
-    Creates and configures a logger for user data processing.
-    """
-    logger = logging.getLogger("user_data")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-
-    formatter = RedactingFormatter(PII_FIELDS)
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.INFO)
-    stream_handler.setFormatter(formatter)
-
-    logger.addHandler(stream_handler)
-
-    return logger
-
-
 def main() -> None:
     """
-    Main data from a CSV file, formats it, and logs it with redacted PII.
+    Connects to the database, retrieves user data, formats it, and logs it with redacted PII.
     """
-    logger = get_logger()
+    logger = create_user_data_logger()
+    db = get_db()
+    cursor = db.cursor()
 
-    with open("user_data.csv", newline='') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            fields = '; '.join(
-                    [f"{key}={value}" for key, value in row.items()])
-            logger.info(fields)
+    cursor.execute("SELECT * FROM users;")
+    for row in cursor:
+        # Create a log message from row data
+        fields = '; '.join([f"{key}={value}" for key, value in zip(PII_FIELDS, row)])
+        logger.info(fields)
+
+    cursor.close()
+    db.close()
 
 
 if __name__ == "__main__":
