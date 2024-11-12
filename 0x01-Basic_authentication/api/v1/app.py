@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Route module for the API
+Route module main app
 """
 
 from os import getenv
@@ -26,13 +26,13 @@ elif os.getenv('AUTH_TYPE') == 'basic_auth':
 
 @app.errorhandler(404)
 def not_found(error) -> str:
-    """ error not found page """
+    """ error """
     return jsonify({"error": "Not found"}), 404
 
 
 @app.errorhandler(401)
 def unauthorized_error(error) -> str:
-    """ 401 unauthorized page """
+    """ unauthorized page """
     return jsonify({"error": "Unauthorized"}), 401
 
 
@@ -44,7 +44,7 @@ def forbidden_error(error) -> str:
 
 @app.before_request
 def before_request() -> str:
-    """ checks before each request """
+    """ checks request """
     request_path_list = [
         '/api/v1/status/',
         '/api/v1/unauthorized/',
