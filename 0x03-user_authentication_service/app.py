@@ -19,7 +19,7 @@ def home() -> str:
     Returns:
         A JSON welcome message
     """
-    return jsonify({"message": "Welcome"})
+    return jsonify({"message": "Bienvenue"})
 
 
 @app.route('/users', methods=['POST'], strict_slashes=False)
@@ -136,4 +136,3 @@ def reset_password() -> str:
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
