@@ -36,7 +36,7 @@ def register_user() -> str:
     password = request.form.get('password')
     try:
         user = auth.register_user(email, password)
-        return jsonify({"email": user.email, "message": "User successfully registered"})
+        return jsonify({"email": user.email, "message": "User successfuly"})
     except ValueError:
         return jsonify({"message": "Email already exists"}), 400
 
@@ -57,7 +57,7 @@ def create_session() -> str:
         abort(401)
 
     session_id = auth.create_session(email)
-    response = make_response(jsonify({"email": email, "message": "Login successful"}))
+    response = make_response(jsonify({"email": email, "message": "Login su"}))
     response.set_cookie('session_id', session_id)
     return response
 
@@ -129,7 +129,7 @@ def reset_password() -> str:
 
     try:
         auth.update_password(token, new_password)
-        return jsonify({"email": email, "message": "Password updated successfully"})
+        return jsonify({"email": email, "message": "Password updated succey"})
     except Exception:
         abort(403)
 
